@@ -11,7 +11,8 @@ from coletor.serializers import ColetorSerializer
 from coletor.models import Documento
 
 from bs4 import BeautifulSoup
-import requests
+from urllib.parse import urljoin
+import requests, json
 
 
 
@@ -52,7 +53,7 @@ class ColetorListView(ViewSet):
         
         return Response()
 
-import json
+
 class ColetorView(View):
 
     def get (self, request, *args, **kw):
@@ -64,7 +65,7 @@ class ColetorView(View):
             links = soup.find_all('a', href=True)
             text = soup.prettify()
             visao = soup.get_text()
-            urls = [link['href'] for link in links if link.get('href') != '']
+            urls = [urljoin(url,link['href']) for link in links if link.get('href') != '' and '#' not in link.get('href')]
             context = {
                 'url':url,
                 'texto':text,
