@@ -1,12 +1,18 @@
-from django.shortcuts import render
 
+from django.shortcuts import render
+from django.views.generic import View
+from django.http.response import HttpResponse, JsonResponse
 from rest_framework.viewsets import ViewSet
 from rest_framework.response import Response
+from urllib.parse import urlparse
+
 
 from coletor.serializers import ColetorSerializer
 from coletor.models import Documento
 
-from urllib.parse import urlparse
+from bs4 import BeautifulSoup
+import requests
+
 
 
 # Create your views here.
@@ -45,3 +51,27 @@ class ColetorListView(ViewSet):
         aa = self.checkDuplicity(*self.urls)
         
         return Response()
+
+import json
+class ColetorView(View):
+
+    def get (self, request, *args, **kw):
+        url = "http://journals.ecs.soton.ac.uk/java/tutorial/networking/urls/readingWriting.html"
+        context = {}
+        try:
+            pagina = requests.get(url)
+            soup = BeautifulSoup(pagina.content, 'html.parser')
+            links = soup.find_all('a', href=True)
+            text = soup.prettify()
+            visao = soup.get_text()
+            urls = [link['href'] for link in links if link.get('href') != '']
+            context = {
+                'url':url,
+                'texto':text,
+                'visao':visao,
+                'urls':urls
+            }
+
+        except Exception as e:
+            print('ERRO: {}'.format(e.message))
+        return JsonResponse(context)
