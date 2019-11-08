@@ -71,7 +71,6 @@ class ColetorView(View):
                 'visao':visao,
                 'urls':urls
             }
-
         except Exception as e:
             print('ERRO: {}'.format(e.message))
         return JsonResponse(context)
