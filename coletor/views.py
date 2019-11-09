@@ -8,11 +8,15 @@ from urllib.parse import urlparse
 
 
 from coletor.serializers import ColetorSerializer
-from coletor.models import Documento
+from coletor.models import Documento, \
+        Host, \
+        Link,\
+        TermoDocumento, \
+        IndiceInvertido
 
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
-import requests, json
+from urllib.parse import urljoin, urlsplit
+import re, requests, json
 
 
 
@@ -22,56 +26,81 @@ class ColetorListView(ViewSet):
     serializer_class = ColetorSerializer
     queryset = Documento.objects.all()
 
-    def __init__(self,*args,**kwargs):
-        self.urls =  [
-            "http://journals.ecs.soton.ac.uk/java/tutorial/networking/urls/readingWriting.html",
-            "https://www.baeldung.com/java-string-remove-stopwords",
-            "https://www.youtube.com/watch?v=MGWJbaYdy-Y&list=PLZTjHbp2Y7812axMiHkbXTYt9IDCSYgQz",
-            "https://www.guj.com.br/t/verficar-duplicata-num-array-unidimensional/35422/9",
-            "http://journals.ecs.soton.ac.uk/java/tutorial/networking/urls/readingWriting.html"
-            ]
-        super().__init__(*args, **kwargs)
-
-    def checkDuplicity(self, *urls):
-        clear_urls = []
-        for url in urls:
-            complete_url = f"{urlparse(url).scheme}://{urlparse(url).hostname}"
-            if complete_url not in clear_urls:
-                clear_urls.append(complete_url)
-        return clear_urls
-            
-
-    def checkRobotsDisalow(self, urls):
-        import requests, bs4
-        # TODO: Terminar stop words com requests e bs4
-        for url in urls:
-            requests.get(f'{url}/robots.txt')
-        
-
-    def list(self, request, *args, **kw):
-        aa = self.checkDuplicity(*self.urls)
-        
-        return Response()
-
+    
 
 class ColetorView(View):
 
-    def get (self, request, *args, **kw):
-        url = "http://journals.ecs.soton.ac.uk/java/tutorial/networking/urls/readingWriting.html"
-        context = {}
+    def _checkDuplicity(self, url_list):
+        return list(set(url_list))
+    
+    def _linksInRobots(self, url):
+        host = "{0.scheme}://{0.netloc}".format(urlsplit(url))
+        robots = requests.get(f'{host}/robots.txt').content.decode('utf-8')
+        robots = ''.join(re.findall('Disallow:\s/[a-zA-Z0-9/*_&?\-\.]+', robots))
+        robots = re.sub(r'Disallow:\s', '@'+host, robots)
+        robots = re.split('@', robots)
+        return host, set(robots)
+    
+    def _recuperaLinks(self, url, links):
+        clean_links = []
+        for link in links:
+            if not bool(re.match('javascript|#', link.get('href'))):
+                clean_links.append(urljoin(url,link.get('href')))
+        return set(clean_links)
+
+
+
+    def _coletaUrls(self, url):
+        coletado = {}
         try:
+            host , robots = self._linksInRobots(url)
             pagina = requests.get(url)
+            
             soup = BeautifulSoup(pagina.content, 'html.parser')
             links = soup.find_all('a', href=True)
-            text = soup.prettify()
+            texto = soup.prettify()
             visao = soup.get_text()
-            urls = [urljoin(url,link['href']) for link in links if link.get('href') != '' and '#' not in link.get('href')]
-            context = {
+
+            clean_links = self._recuperaLinks(host,links)
+            urls = list(clean_links - robots)
+            coletado = {
                 'url':url,
-                'texto':text,
+                'texto':texto,
                 'visao':visao,
                 'urls':urls
             }
         except Exception as e:
-            print('ERRO: {}'.format(e.message))
-        return JsonResponse(context)
+            print('ERRO: {0}'.format(e))
+        ho = Host(url=host)
+        ho.count += 1
+        ho.save()
+        li = Link(
+            url='url',
+            host=ho,
+        )
+        li.save()
+        doc = Documento(
+            url=url,
+            texto=texto,
+            visao=visao,
+            link=li
+        )
+        doc.save()
+
+        for url in urls:
+            Link(host=ho,url=url).save()
+        return coletado
+
+    
+    def get (self, request, *args, **kw):
+        urls = [
+            #"http://journals.ecs.soton.ac.uk/java/tutorial/networking/urls/readingWriting.html",
+            #"https://www.baeldung.com/java-string-remove-stopwords",
+            "https://www.youtube.com/watch?v=MGWJbaYdy-Y&list=PLZTjHbp2Y7812axMiHkbXTYt9IDCSYgQz",
+            #"https://www.guj.com.br/t/verficar-duplicata-num-array-unidimensional/35422/9",
+            #"http://journals.ecs.soton.ac.uk/java/tutorial/networking/urls/readingWriting.html"
+            ]
+        context = []
+        for url in urls:
+            context.append(self._coletaUrls(url))
+        return JsonResponse(context, safe=False)
