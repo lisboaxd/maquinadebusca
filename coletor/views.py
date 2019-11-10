@@ -6,12 +6,12 @@ from django.http.response import \
     JsonResponse, \
     HttpResponseRedirect
 from django.urls import reverse
-from rest_framework.viewsets import ViewSet
+from rest_framework.viewsets import ViewSet, ModelViewSet
 from rest_framework.response import Response
 from urllib.parse import urlparse
 
 
-from coletor.serializers import ColetorSerializer
+from coletor.serializers import DocumentoSerializer, HostSerializer, LinkSerializer
 from coletor.models import \
         Documento, \
         Host, \
@@ -28,9 +28,9 @@ import re, requests, json, time
 
 # Create your views here.
 
-class ColetorListView(ViewSet):
-    serializer_class = ColetorSerializer
-    queryset = Documento.objects.all()
+#class ColetorListView(ViewSet):
+#    serializer_class = ColetorSerializer
+#    queryset = Documento.objects.all()
 
     
 
@@ -101,7 +101,7 @@ class ColetorView(View):
             li = Link(url=url, host=ho)
             li.host=ho
             li.save()
-            doc = Documento(url=url,texto=texto,visao=visao,link=li)
+            doc = Documento(url=coletado.get('url'),texto=coletado.get('texto'),visao=coletado.get('visao'),link=li)
             doc.save()
             print('\x1b[2;30;44m DOCUMENTO: ' + url + '\x1b[0m')
 
@@ -127,8 +127,6 @@ class ColetorView(View):
             "https://www.guj.com.br/t/verficar-duplicata-num-array-unidimensional/35422/9",
             "http://journals.ecs.soton.ac.uk/java/tutorial/networking/urls/readingWriting.html"
             ]
-        #import ipdb; ipdb.set_trace()
-        #raise Exception
         if len(request.GET.getlist('urls')) > 0:
             urls = request.GET.getlist('urls')
         context = []
@@ -141,8 +139,16 @@ class ColetorView(View):
         return HttpResponseRedirect(reverse('iniciar'))
 
 
-class LinksView(View):
+class LinkViewSet(ModelViewSet):
+    queryset = Link.objects.all()
+    serializer_class = LinkSerializer
 
-    def get(self, request, *args, **kw):
-        import ipdb; ipdb.set_trace()
-        link = Link.objects.filter()
+
+class DocumentoViewSet(ModelViewSet):
+    queryset = Documento.objects.all()
+    serializer_class = DocumentoSerializer
+
+
+class HostViewSet(ModelViewSet):
+    queryset = Host.objects.all()
+    serializer_class = HostSerializer
