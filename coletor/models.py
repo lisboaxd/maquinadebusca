@@ -6,8 +6,14 @@ class Host(models.Model):
     url = models.URLField('url')
     count = models.BigIntegerField(validators=[MinValueValidator(0)],default=0)
 
+    def __srt__(self):
+        return self.url
+    
+    def __repr__(self):
+        return self.url
+
 class Link(models.Model):
-    coletado_em = models.DateField('Coletado em:', auto_now=True)
+    coletado_em = models.DateTimeField('Coletado em:', auto_now=True)
     url = models.URLField('Url')
     host = models.ForeignKey(Host, on_delete=models.CASCADE)
 
