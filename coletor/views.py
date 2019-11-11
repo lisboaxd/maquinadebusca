@@ -1,5 +1,7 @@
 
+from django.db.models import Q
 from django.shortcuts import render
+from django.utils import timezone
 from django.views.generic import View
 from django.http.response import \
     HttpResponse, \
@@ -37,15 +39,10 @@ import re, requests, json, time
 
 class ColetorView(View):
 
-    def __init__(self, *args, **kwargs):
-        #self.stopwords = 
-        super().__init__(*args, **kwargs)
-
-
-    def _checkDuplicity(self, url_list):
+    def _remove_duplicados(self, url_list):
         return list(set(url_list))
     
-    def _linksInRobots(self, url):
+    def _links_no_robots(self, url):
         '''
         Retorna set de links no robots.txt do host
         '''
@@ -56,7 +53,7 @@ class ColetorView(View):
         robots = re.split('@', robots)
         return host, set(robots)
     
-    def _recuperaLinks(self, url, links):
+    def _recupera_links(self, url, links):
         clean_links = []
         for link in links:
             if not bool(re.match('javascript|#', link.get('href'))):
@@ -72,18 +69,19 @@ class ColetorView(View):
         stopwords = file.readlines()
         file.close()
         stopwords = ''.join(stopwords).split('\n')
-        aaa = ' | '.join(stopwords)
-        print(aaa)
+        regex = ' | '.join(stopwords)
         texto = texto.lower().rstrip()
-        texto2 = re.sub(aaa,'',texto)
-        return texto2
+        texto = re.sub(regex,'',texto)
+        return texto
+    
+    def tempo_passado(self, hora=0, minuto=0):
+        return datetime.now(tz=timezone.utc) - timedelta(hours=hora,minutes=minuto)
 
-
-    def _coletaUrls(self, url):
+    def _coleta_urls(self, url):
         coletado = {}
         host = ''
         try:
-            host , robots = self._linksInRobots(url)
+            host , robots = self._links_no_robots(url)
             pagina = requests.get(url)
             
             soup = BeautifulSoup(pagina.content, 'html.parser')
@@ -91,7 +89,7 @@ class ColetorView(View):
             texto = soup.prettify()
             visao = self._remove_stopwords(soup.get_text())
 
-            clean_links = self._recuperaLinks(host,links)
+            clean_links = self._recupera_links(host,links)
             urls = list(clean_links - robots)
             coletado = {
                 'url':url,
@@ -110,7 +108,7 @@ class ColetorView(View):
         ho.save()
 
         #Cria o link coletado no banco, caso exista, retorna ele e atuaza a data de coleta
-        time_threshold = datetime.now() - timedelta(minutes=1)
+        time_threshold = self.tempo_passado(hora=2)
         try:
             li = Link.objects.get(url=url, host=ho, coletado_em__gt=time_threshold)
         except Link.DoesNotExist:
@@ -134,24 +132,24 @@ class ColetorView(View):
         print('\x1b[2;30;44m {0}\n{1}\n{0} \x1b[0m'.format('###'*10, coletado.get('url')))
         return coletado
 
-    
-    def get (self, request, *args, **kw):
-        urls = [
-            "http://journals.ecs.soton.ac.uk/java/tutorial/networking/urls/readingWriting.html",
-            "https://www.baeldung.com/java-string-remove-stopwords",
-            "https://www.youtube.com/watch?v=MGWJbaYdy-Y&list=PLZTjHbp2Y7812axMiHkbXTYt9IDCSYgQz",
-            "https://www.guj.com.br/t/verficar-duplicata-num-array-unidimensional/35422/9",
-            "http://journals.ecs.soton.ac.uk/java/tutorial/networking/urls/readingWriting.html"
+    def links_para_coletar(self):
+        urls = Link.objects.filter(coletado_em__lt=self.tempo_passado(hora=2)).values('url')
+        if not urls:
+            return [
+                {'url':"http://journals.ecs.soton.ac.uk/java/tutorial/networking/urls/readingWriting.html"},
+                {'url':"https://www.baeldung.com/java-string-remove-stopwords"},
+                {'url':"https://www.youtube.com/watch?v=MGWJbaYdy-Y&list=PLZTjHbp2Y7812axMiHkbXTYt9IDCSYgQz"},
+                {'url':"https://www.guj.com.br/t/verficar-duplicata-num-array-unidimensional/35422/9"},
+                {'url':"http://journals.ecs.soton.ac.uk/java/tutorial/networking/urls/readingWriting.html"}
             ]
-        if len(request.GET.getlist('urls')) > 0:
-            urls = request.GET.getlist('urls')
-        context = []
-        for url in urls:
-            time.sleep(10)
-            context.append(self._coletaUrls(url))
-        links = Link.objects.filter(coletado_em__lt=datetime.now() - timedelta(minutes=1)).values('url')
+        return urls
+
+
+    def get (self, request, *args, **kw):
+        links = self.links_para_coletar()
         for link in links:
-            self._coletaUrls(link.get('url'))
+            time.sleep(10)
+            self._coleta_urls(link.get('url'))
         return HttpResponseRedirect(reverse('iniciar'))
 
 
