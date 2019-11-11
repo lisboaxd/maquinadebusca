@@ -3,7 +3,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 
 # Create your models here.
 class Host(models.Model):
-    url = models.URLField('url')
+    url = models.URLField('url', unique=True)
     count = models.BigIntegerField(validators=[MinValueValidator(0)],default=0)
 
     def __srt__(self):
@@ -14,7 +14,7 @@ class Host(models.Model):
 
 class Link(models.Model):
     coletado_em = models.DateTimeField('Coletado em:', auto_now=True)
-    url = models.URLField('Url')
+    url = models.URLField('Url', unique=True)
     host = models.ForeignKey(Host, on_delete=models.CASCADE)
 
 class Documento(models.Model):
