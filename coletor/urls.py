@@ -12,11 +12,4 @@ router.register('link', LinkViewSet)
 urlpatterns = router.urls
 urlpatterns += [
     path('iniciar/', ColetorView.as_view(), name='iniciar'),
-    path('documento/', ColetorView.as_view(), name='links'),
-    path('documento/<int:id>', ColetorView.as_view(), name='links'),
-    path('links/', ColetorView.as_view(), name='links'),
-    path('links/<int:id>', ColetorView.as_view(), name='links'),
-    path('host/', ColetorView.as_view(), name='links'),
-    path('host/<int:id>', ColetorView.as_view(), name='links'),
-    
 ]

@@ -18,6 +18,7 @@ from coletor.models import \
         Link,\
         TermoDocumento, \
         IndiceInvertido
+from maquinadebusca.settings import BASE_DIR
 
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
@@ -35,6 +36,11 @@ import re, requests, json, time
     
 
 class ColetorView(View):
+
+    def __init__(self, *args, **kwargs):
+        #self.stopwords = 
+        super().__init__(*args, **kwargs)
+
 
     def _checkDuplicity(self, url_list):
         return list(set(url_list))
@@ -60,7 +66,17 @@ class ColetorView(View):
     def _verifica_se_existe(self, model, *args, **kw):
         return len(model.objects.filter(**kw)) > 0
 
-
+    
+    def _remove_stopwords(self, texto):        
+        file = open(BASE_DIR+'/stopwords.txt','r')
+        stopwords = file.readlines()
+        file.close()
+        stopwords = ''.join(stopwords).split('\n')
+        aaa = ' | '.join(stopwords)
+        print(aaa)
+        texto = texto.lower().rstrip()
+        texto2 = re.sub(aaa,'',texto)
+        return texto2
 
 
     def _coletaUrls(self, url):
@@ -73,7 +89,7 @@ class ColetorView(View):
             soup = BeautifulSoup(pagina.content, 'html.parser')
             links = soup.find_all('a', href=True)
             texto = soup.prettify()
-            visao = soup.get_text()
+            visao = self._remove_stopwords(soup.get_text())
 
             clean_links = self._recuperaLinks(host,links)
             urls = list(clean_links - robots)
