@@ -9,7 +9,10 @@ from django.http.response import \
     HttpResponseRedirect
 from django.urls import reverse
 from rest_framework.viewsets import ViewSet, ModelViewSet
+from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.generics import ListCreateAPIView
+from rest_framework import status
 from urllib.parse import urlparse
 
 
@@ -28,14 +31,6 @@ from urllib.parse import urljoin, urlsplit
 import re, requests, json, time
 
 
-
-# Create your views here.
-
-#class ColetorListView(ViewSet):
-#    serializer_class = ColetorSerializer
-#    queryset = Documento.objects.all()
-
-    
 
 class ColetorView(View):
 
@@ -60,12 +55,16 @@ class ColetorView(View):
     def _recupera_links(self, url, links):
         clean_links = []
         for link in links:
-            if not bool(re.match('javascript|#', link.get('href'))):
+            if not bool(re.match('javascript|#|mailto*', link.get('href'))):
                 clean_links.append(urljoin(url,link.get('href')))
         return set(clean_links)
 
     def _verifica_se_existe(self, model, *args, **kw):
-        return len(model.objects.filter(**kw)) > 0
+        ob = model.objects.filter(**kw)
+        if ob.count() > 0:
+            return ob.first()
+        else:
+            return False
 
     def _remove_stopwords(self, texto):        
         file = open(BASE_DIR+'/stopwords.txt','r')
@@ -81,7 +80,6 @@ class ColetorView(View):
         return datetime.now(tz=timezone.utc) - timedelta(hours=hora,minutes=minuto)
 
     def _coleta(self, url):
-        
         try:
             host = self._obtem_host(url)
             robots = self._links_no_robots(url)
@@ -90,7 +88,7 @@ class ColetorView(View):
             soup = BeautifulSoup(pagina.content, 'html.parser')
             links = soup.find_all('a', href=True)
             texto = soup.prettify()
-            visao = self._remove_stopwords(soup.get_text())
+            visao = self._remove_stopwords(BeautifulSoup(pagina.content, 'lxml').get_text())
 
             clean_links = self._recupera_links(host,links)
             urls = list(clean_links - robots)
@@ -101,9 +99,11 @@ class ColetorView(View):
                 'urls':urls
             }
         except Exception as e:
-            return False
+             print('\x1b[6;30;42m Erro ao coletar \x1b[0m')
+        
 
-    def salva_host(self, url):
+    
+    def salva_host(self,url):
         host = self._obtem_host(url)
         ho, created = Host.objects.get_or_create(url=host)
         if created:
@@ -116,45 +116,55 @@ class ColetorView(View):
     def salva_link(self, url, host, tempo_tolerancia=2):
         if type(host) == str:
             host = Host.objects.get(url=host)
-        time_threshold = self.tempo_passado(hora=tempo_tolerancia)
+        time_threshold = self.tempo_passado(minuto=tempo_tolerancia)
         li = ''
         try:
             li = Link.objects.get(url=url, host=host, coletado_em__gt=time_threshold)
         except Link.DoesNotExist:
             li = Link(url=url, host=host)
-            li.host=host
             li.save()
-            doc = Documento(url=url.get('url'),texto=url.get('texto'),visao=url.get('visao'),link=li)
-            doc.save()
-            print('\x1b[2;30;44m DOCUMENTO: ' + url.get('url') + '\x1b[0m')
-        return li
+            return li, True
+        return li, False
     
+
+    def salva_documento(self,link, coletado):
+        doc, create = Documento.objects.get_or_create(
+            link = link,
+            texto = coletado.get('texto'),
+            visao = coletado.get('visao')
+        )
     
     def _coleta_urls(self, url):
-
-        #refatorar
-        coletado = self._coleta(url)
-        host = self._obtem_host(url)
-        obj_host = self.salva_host(url)
-       
-
-        #Cria o link coletado no banco, caso exista, retorna ele e atuaza a data de coleta
-        li = self.salva_link(coletado, host)
-        for url in coletado.get('urls'):
-            try:
-                li, created = Link.objects.get_or_create(host=obj_host,url=url)
-                if created:
-                    print('\x1b[6;30;42m' + url + '\x1b[0m')
-                    continue
-                else:
-                    print('\x1b[2;30;41m' + url + '\x1b[0m')
-            except:
-                continue
-        print('\x1b[2;30;44m {0}\n{1}\n{0} \x1b[0m'.format('###'*10, coletado.get('url')))
-        return coletado
+        link_existe = self._verifica_se_existe(Link, url=url)
+        if link_existe:
+            if link_existe.coletado_em <= self.tempo_passado(minuto=2):
+                coletado = self._coleta(url)
+                host = self._obtem_host(url)
+                obj_host = self.salva_host(url)
+                link_existe.coletado_em = self.tempo_passado()
+                link_existe.save()
+                doc, created = link_existe.documento_set.get_or_create(
+                    url=link_existe.url,
+                    texto=coletado.get('texto'),
+                    visao=coletado.get('visao'),
+                    link=link_existe
+                )
+                doc.save()
+                for url in coletado.get('urls'):
+                    try:
+                        li, created = Link.objects.get_or_create(host=obj_host,url=url)
+                        if created:
+                            print('\x1b[6;30;42m' + url + '\x1b[0m')
+                            continue
+                        else:
+                            print('\x1b[2;30;41m' + url + '\x1b[0m')
+                    except:
+                        continue
+                print('\x1b[2;30;44m {0}\n{1}\n{0} \x1b[0m'.format('###'*10, coletado.get('url')))
+        return True
 
     def links_para_coletar(self):
-        urls = Link.objects.filter(coletado_em__lt=self.tempo_passado(hora=2)).values('url')
+        urls = Link.objects.latest('-coletado_em')
         if not urls:
             return [
                 {'url':"http://journals.ecs.soton.ac.uk/java/tutorial/networking/urls/readingWriting.html"},
@@ -168,36 +178,15 @@ class ColetorView(View):
 
     def get (self, request, *args, **kw):
         links = self.links_para_coletar()
-        #loop eterno nos mesmos links
-        for link in links:
-            self._coleta_urls(link.get('url'))
+        if type(links) == dict:
+            for link in links:
+                self._coleta_urls(link.get('url'))
+        else:
+            self._coleta_urls(links.url)
             time.sleep(10)
         return HttpResponseRedirect(reverse('iniciar'))
+
     
-    # def post (self, request, *args, **kw):
-    #     from django.db import IntegrityError
-    #     from django.core.serializers import serialize
-    #     response = []
-
-    #     try:
-    #         urls = json.loads(request.body)
-    #         print(urls)
-    #         for url in urls:
-    #             print(url)
-    #             try:
-    #                 response.append(self._coleta_urls(url.get('url')))
-    #             except IntegrityError as e:
-    #                 response.append({
-    #                     'tipoe':'erro',
-    #                     'texto': f'{url} já foi cadastrada anteriormente'
-    #                     })
-    #     except Exception as e:
-    #         print(f'Erro ao processar requisição: {e}')
-    #     return JsonResponse(response, safe=False)
-
-        
-    
-
 
 class LinkViewSet(ModelViewSet):
     queryset = Link.objects.all()
