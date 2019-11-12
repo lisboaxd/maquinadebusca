@@ -124,9 +124,9 @@ class ColetorView(View):
             li = Link(url=url, host=host)
             li.host=host
             li.save()
-            doc = Documento(url=coletado.get('url'),texto=coletado.get('texto'),visao=coletado.get('visao'),link=li)
+            doc = Documento(url=url.get('url'),texto=url.get('texto'),visao=url.get('visao'),link=li)
             doc.save()
-            print('\x1b[2;30;44m DOCUMENTO: ' + url + '\x1b[0m')
+            print('\x1b[2;30;44m DOCUMENTO: ' + url.get('url') + '\x1b[0m')
         return li
     
     
@@ -139,11 +139,10 @@ class ColetorView(View):
        
 
         #Cria o link coletado no banco, caso exista, retorna ele e atuaza a data de coleta
-        li = self.salva_link(url, host)
-
+        li = self.salva_link(coletado, host)
         for url in coletado.get('urls'):
             try:
-                li, created = Link.objects.get_or_create(host=ho,url=url)
+                li, created = Link.objects.get_or_create(host=obj_host,url=url)
                 if created:
                     print('\x1b[6;30;42m' + url + '\x1b[0m')
                     continue
