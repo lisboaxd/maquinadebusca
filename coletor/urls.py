@@ -13,4 +13,6 @@ router.register('link', LinkViewSet)
 urlpatterns = router.urls
 urlpatterns += [
     path('iniciar/', csrf_exempt(ColetorView.as_view()), name='iniciar'),
+    # path('teste/', csrf_exempt(LinkPostView.as_view()), name='teste'),
+
 ]
