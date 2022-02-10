@@ -3,7 +3,7 @@ beautifulsoup4==4.8.1
 certifi==2019.9.11
 chardet==3.0.4
 decorator==4.4.1
-Django==2.2.6
+Django==2.2.27
 djangorestframework==3.10.3
 html5lib==1.0.1
 idna==2.8
